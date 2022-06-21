@@ -16,7 +16,7 @@ contract Box is Ownable {
         emit ValueChanged(newValue);
     }
 
-    // haha
+    // haha v2.0
 
     // Reads the last stored value
     function retrieve() public view returns (string[] memory) {
