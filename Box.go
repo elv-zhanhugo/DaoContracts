@@ -43,11 +43,7 @@ func main(){
 	if err != nil {
 		log.Fatal(err)
 	}
-	name,err := instance.Name(&bind.CallOpts{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(name)
+	
 
 	tokenAddr, err = bind.WaitDeployed(context.Background(), client, tx)
 	if err != nil{
@@ -55,6 +51,12 @@ func main(){
 	}
 	fmt.Println("token contract address:", tokenAddr.Hex())
 	fmt.Println("Deployed contract tx hash:", tx.Hash().Hex())
+	
+	name,err := instance.Name(&bind.CallOpts{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(name)
 
 	address, tx, instance2, err := MyGovernor.DeployMyGovernor(auth,client,tokenAddr,common.Address{})
 	if err != nil {
