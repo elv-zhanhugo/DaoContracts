@@ -64,21 +64,21 @@ func MoveBlocks(blocks int, client *ethclient.Client, privateKey *ecdsa.PrivateK
 }
 
 func main() {
-	client, err := ethclient.Dial("http://localhost:8545")
-	// client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
+	// client, err := ethclient.Dial("http://localhost:8545")
+	client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
-	//privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
+	// privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
+	privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
+	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
 	//auth,err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955203))
-	//auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Proposal can be executed at", time.Unix(eta.Int64(), 0))
+	fmt.Println("Proposal can be executed at", eta, time.Unix(eta.Int64(), 0))
 	fmt.Println("Waiting...")
 	for {
 		if time.Now().Unix() > time.Unix(eta.Int64(), 0).Unix() {
