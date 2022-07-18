@@ -5,16 +5,17 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"time"
 
 	"github.com/elv-zhanhugo/DaoTest/build/box"
 	"github.com/elv-zhanhugo/DaoTest/build/governance_standard/governance_timelock"
 	"github.com/elv-zhanhugo/DaoTest/build/governance_standard/governor_contract"
 	"github.com/elv-zhanhugo/DaoTest/build/governance_token"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	solsha3 "github.com/miguelmota/go-solidity-sha3"
 )
 
 func main() {
@@ -30,7 +31,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	auth,err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
 	//auth,err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955203))
 	//auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
 	if err != nil {
@@ -38,14 +39,14 @@ func main() {
 	}
 	auth.GasLimit = uint64(20000000)
 
-	blkNum,err := client.BlockNumber(context.Background())
+	blkNum, err := client.BlockNumber(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("current block num:", blkNum)
 
 	// ***************************************
-	//  Governance token
+	//  Deploy and configure GovernanceToken
 	// ***************************************
 
 	govTknAddr, govTknTx, govTknInst, err := governance_token.DeployGovernanceToken(auth, client)
@@ -59,17 +60,17 @@ func main() {
 	fmt.Println("Deployed Governance Token,", "address:", govTknAddr.Hex(), "tx hash:", govTknTx.Hash().String())
 
 	// users to delegate to themselves in order to activate checkpoints and have their voting power tracked
-	delegateTx,err := govTknInst.Delegate(auth, auth.From)
+	delegateTx, err := govTknInst.Delegate(auth, auth.From)
 	if err != nil {
 		log.Fatal(err)
 	}
-	delegateTxRct,err := bind.WaitMined(context.Background(), client, delegateTx)
+	delegateTxRct, err := bind.WaitMined(context.Background(), client, delegateTx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Delegate Governance Token to token creator,", "tx:", delegateTxRct.TxHash.String())
 
-	chkpts,err := govTknInst.NumCheckpoints(&bind.CallOpts{}, auth.From)
+	chkpts, err := govTknInst.NumCheckpoints(&bind.CallOpts{}, auth.From)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,11 +78,11 @@ func main() {
 	fmt.Println("=================================================")
 
 	// ***************************************
-	// Governance Timelock
+	// Deploy and configure GovernanceTimelock
 	// ***************************************
 
 	var minDelay int64 = 30 // 30 seconds
-	govTimelockAddr, govTimelockTx, govTimelockInst, err:= governance_timelock.DeployGovernanceTimelock(auth, client, big.NewInt(minDelay), nil, nil)
+	govTimelockAddr, govTimelockTx, govTimelockInst, err := governance_timelock.DeployGovernanceTimelock(auth, client, big.NewInt(minDelay), nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,16 +94,14 @@ func main() {
 	fmt.Println("=================================================")
 
 	// ***************************************
-	// Governor
+	// Deploy and configure Governor
 	// ***************************************
 
 	var quorumPercentage int64 = 4
-	// VOTING_PERIOD = 45818  # 1 week - more traditional.
-	// You might have different periods for different kinds of proposals
-	var votingPeriod int64 = 5 // 1 blocks
-	var votingDelay int64 = 1  // 1 blocks
+	var votingPeriod int64 = 5 // blocks
+	var votingDelay int64 = 1  // blocks
 
-	governorAddr, governorTx, governorInst, err:= governor_contract.DeployGovernorContract(auth, client, govTknAddr, govTimelockAddr, big.NewInt(quorumPercentage), big.NewInt(votingPeriod), big.NewInt(votingDelay))
+	governorAddr, governorTx, governorInst, err := governor_contract.DeployGovernorContract(auth, client, govTknAddr, govTimelockAddr, big.NewInt(quorumPercentage), big.NewInt(votingPeriod), big.NewInt(votingDelay))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,12 +111,11 @@ func main() {
 	}
 	fmt.Println("Deployed Governor contract,", "address:", governorAddr.Hex(), "tx hash:", governorTx.Hash().String())
 
-
-	proposerRole,err := govTimelockInst.PROPOSERROLE(&bind.CallOpts{})
+	proposerRole, err := govTimelockInst.PROPOSERROLE(&bind.CallOpts{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	executorRole,err := govTimelockInst.EXECUTORROLE(&bind.CallOpts{})
+	executorRole, err := govTimelockInst.EXECUTORROLE(&bind.CallOpts{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -130,18 +128,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	proposorRoleGrantTxRct,err := bind.WaitMined(context.Background(), client, proposorRoleGrantTx)
+	proposorRoleGrantTxRct, err := bind.WaitMined(context.Background(), client, proposorRoleGrantTx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Set proposer role to governor contract,", "tx:", proposorRoleGrantTxRct.TxHash.String())
 
-
 	executorRoleGrantTx, err := govTimelockInst.GrantRole(auth, executorRole, common.Address{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	executorRoleGrantTxRct,err := bind.WaitMined(context.Background(), client, executorRoleGrantTx)
+	executorRoleGrantTxRct, err := bind.WaitMined(context.Background(), client, executorRoleGrantTx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -151,7 +148,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	timelkRoleRevokeTxRct,err := bind.WaitMined(context.Background(), client, timelkRoleRevokeTx)
+	timelkRoleRevokeTxRct, err := bind.WaitMined(context.Background(), client, timelkRoleRevokeTx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -159,10 +156,10 @@ func main() {
 	fmt.Println("=================================================")
 
 	// ***************************************
-	// Box contract
+	// Deploy and configure Box
 	// ***************************************
 
-	boxAddr, boxTx, boxInst, err:= box.DeployBox(auth, client)
+	boxAddr, boxTx, boxInst, err := box.DeployBox(auth, client)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -172,61 +169,165 @@ func main() {
 	}
 	fmt.Println("Box contract", "address:", boxAddr.Hex(), "tx hash:", boxTx.Hash().String())
 
-	transferboxOwnerhsipTx,err := boxInst.TransferOwnership(auth, govTimelockAddr)
+	transferboxOwnerhsipTx, err := boxInst.TransferOwnership(auth, govTimelockAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
-	transferboxOwnerhsipTxRct,err := bind.WaitMined(context.Background(), client, transferboxOwnerhsipTx)
+	transferboxOwnerhsipTxRct, err := bind.WaitMined(context.Background(), client, transferboxOwnerhsipTx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Transfer box contract ownership to timelock contract,", "tx:", transferboxOwnerhsipTxRct.TxHash.String())
 
-	// governor propose new store value for box contract
+	// ***************************************
+	// Propose new store value for box contract
+	// ***************************************
 
-	proposalDescription := "store test"
-	newStoreValue := []string{"test"}
+	proposalDescription := "Storing hello world!"
+	newStoreValue := []string{"hello world!"}
 
-	 boxABI,err := box.BoxMetaData.GetAbi()
-	 if err != nil {
-	 	log.Fatal(err)
-	 }
-	 boxStoreCalldata,err := boxABI.Pack("store",newStoreValue)
-	 if err != nil {
-	 	log.Fatal(err)
-	 }
-	 val := big.NewInt(0)
-	govProposeTx,err := governorInst.Propose(auth, []common.Address{boxAddr},[]*big.Int{val},[][]byte{boxStoreCalldata},proposalDescription)
+	boxABI, err := box.BoxMetaData.GetAbi()
 	if err != nil {
 		log.Fatal(err)
 	}
-	govProposeTxRct,err := bind.WaitMined(context.Background(), client, govProposeTx)
+	boxStoreCalldata, err := boxABI.Pack("store", newStoreValue)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Governor proposes new Box contract store value,","tx:",govProposeTxRct.TxHash.String())
+	val := big.NewInt(0)
+	govProposeTx, err := governorInst.Propose(auth, []common.Address{boxAddr}, []*big.Int{val}, [][]byte{boxStoreCalldata}, proposalDescription)
+	if err != nil {
+		log.Fatal(err)
+	}
+	govProposeTxRct, err := bind.WaitMined(context.Background(), client, govProposeTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Governor proposes new Box contract store value,", "tx:", govProposeTxRct.TxHash.String())
 
-	proposalCreatedEvent,err := governorInst.ParseProposalCreated(*govProposeTxRct.Logs[0])
+	proposalCreatedEvent, err := governorInst.ParseProposalCreated(*govProposeTxRct.Logs[0])
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Proposal is created, event data:", "proposal_id", proposalCreatedEvent.ProposalId, "desc", proposalCreatedEvent.Description)
 	fmt.Println("Proposal is created, event data:", "start_block", proposalCreatedEvent.StartBlock, "end_block", proposalCreatedEvent.EndBlock)
 
-	proposalState,err := governorInst.State(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
+	proposalState, err := governorInst.State(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
 	if err != nil {
 		log.Fatal(err)
 	}
-	proposalSnapshot,err := governorInst.ProposalSnapshot(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
+	proposalVotes, err := governorInst.ProposalVotes(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
 	if err != nil {
 		log.Fatal(err)
 	}
-	proposalDeadline,err := governorInst.ProposalDeadline(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
+	proposalDeadline, err := governorInst.ProposalDeadline(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Proposal Info,", "state", proposalState, "snapshot", proposalSnapshot, "deadline", proposalDeadline)
+	fmt.Println("Proposal Info,", "state", proposalState, "votes", proposalVotes, "deadline", proposalDeadline)
 	fmt.Println("=================================================")
 
+	// ***************************************
+	// Vote for the proposal
+	// ***************************************
+
+	// This is done to skip blocks for voting delay, need to replace with wait
+	for i := 0; i < int(votingDelay); i++ {
+		_, err = governorInst.CastVote(auth, proposalCreatedEvent.ProposalId, 1)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	voteTx, err := governorInst.CastVote(auth, proposalCreatedEvent.ProposalId, 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// This is done to skip blocks for voting period, need to replace with wait
+	for i := 0; i < int(votingPeriod); i++ {
+		_, err = governorInst.CastVote(auth, proposalCreatedEvent.ProposalId, 1)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	voteTxRct, err := bind.WaitMined(context.Background(), client, voteTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Vote is casted, event data:", voteTxRct.TxHash.String())
+
+	voteCastEvent, err := governorInst.ParseVoteCast(*voteTxRct.Logs[0])
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Vote support:", voteCastEvent.Support)
+	fmt.Println("=================================================")
+
+	// ***************************************
+	// Queue the proposal
+	// ***************************************
+
+	var proposalDescriptionHash [32]byte
+	copy(proposalDescriptionHash[:], solsha3.SoliditySHA3(
+		solsha3.String(proposalDescription),
+	))
+
+	govQueueTx, err := governorInst.Queue(auth, []common.Address{boxAddr}, []*big.Int{val}, [][]byte{boxStoreCalldata}, proposalDescriptionHash)
+	if err != nil {
+		log.Fatal(err)
+	}
+	govQueueTxRct, err := bind.WaitMined(context.Background(), client, govQueueTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Governor queue passed proposal,", "tx:", govQueueTxRct.TxHash.String())
+
+	eta, err := governorInst.ProposalEta(&bind.CallOpts{}, proposalCreatedEvent.ProposalId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Proposal can be executed at", time.Unix(eta.Int64(), 0))
+	fmt.Println("Waiting...")
+	for {
+		if time.Now().Unix() > time.Unix(eta.Int64(), 0).Unix() {
+			break
+		}
+	}
+	fmt.Println("Finished queue!")
+	fmt.Println("=================================================")
+
+	// ***************************************
+	// Execute the proposal
+	// ***************************************
+
+	govExecuteTx, err := governorInst.Execute(auth, []common.Address{boxAddr}, []*big.Int{val}, [][]byte{boxStoreCalldata}, proposalDescriptionHash)
+	if err != nil {
+		log.Fatal(err)
+	}
+	govExecuteTxRct, err := bind.WaitMined(context.Background(), client, govExecuteTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Governor execute passed proposal,", "tx:", govExecuteTxRct.TxHash.String())
+
+	proposalExecutedEvent, err := governorInst.ParseProposalExecuted(*govExecuteTxRct.Logs[0])
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Proposal is executed, event data:", "proposal_id", proposalExecutedEvent.ProposalId)
+
+	fmt.Println("=================================================")
+
+	// ***************************************
+	// Check box value
+	// ***************************************
+
+	retrievedValue, err := boxInst.Retrieve(&bind.CallOpts{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Box is storing: ", retrievedValue)
 }
