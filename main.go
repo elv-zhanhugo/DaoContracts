@@ -17,68 +17,100 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/joho/godotenv"
 	solsha3 "github.com/miguelmota/go-solidity-sha3"
 )
 
 func MoveBlocks(blocks int, client *ethclient.Client, privateKey *ecdsa.PrivateKey) {
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		log.Fatal("error casting public key to ECDSA")
-	}
-
-	address := crypto.PubkeyToAddress(*publicKeyECDSA)
-
-	value := big.NewInt(1) // wei
-
-	gasLimit := uint64(21000) // units
-
-	chainID, err := client.NetworkID(context.Background())
+	networkId, err := client.NetworkID(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println("Waiting for", blocks, "block(s)")
+	if networkId == big.NewInt(4) {
+		curr, err := client.BlockNumber(context.Background())
+		if err != nil {
+			log.Fatal(err)
+		}
+		end := curr + uint64(blocks) + 1
+		for {
+			curr, err = client.BlockNumber(context.Background())
+			if err != nil {
+				log.Fatal(err)
+			}
+			if curr > end {
+				break
+			}
+		}
+	} else {
+		publicKey := privateKey.Public()
+		publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+		if !ok {
+			log.Fatal("error casting public key to ECDSA")
+		}
 
-	for i := 0; i < blocks; i++ {
-		nonce, err := client.PendingNonceAt(context.Background(), address)
+		address := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+		value := big.NewInt(1) // wei
+
+		gasLimit := uint64(21000) // units
+
+		chainID, err := client.NetworkID(context.Background())
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		gasPrice, err := client.SuggestGasPrice(context.Background())
-		if err != nil {
-			log.Fatal(err)
-		}
+		for i := 0; i < blocks+1; i++ {
+			nonce, err := client.PendingNonceAt(context.Background(), address)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		tx := types.NewTransaction(nonce, address, value, gasLimit, gasPrice, nil)
+			gasPrice, err := client.SuggestGasPrice(context.Background())
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-		if err != nil {
-			log.Fatal(err)
-		}
+			tx := types.NewTransaction(nonce, address, value, gasLimit, gasPrice, nil)
 
-		err = client.SendTransaction(context.Background(), signedTx)
-		if err != nil {
-			log.Fatal(err)
+			signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			err = client.SendTransaction(context.Background(), signedTx)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			_, err = bind.WaitMined(context.Background(), client, signedTx)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }
 
 func main() {
+	godotenv.Load()
+
 	// client, err := ethclient.Dial("http://localhost:8545")
 	client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
+	// client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
 	privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
+	// privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
-	//auth,err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955203))
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
+	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -284,8 +316,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	MoveBlocks(int(votingPeriod), client, privateKey)
-
 	voteTxRct, err := bind.WaitMined(context.Background(), client, voteTx)
 	if err != nil {
 		log.Fatal(err)
@@ -297,6 +327,9 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Vote support:", voteCastEvent.Support)
+
+	MoveBlocks(int(votingPeriod), client, privateKey)
+
 	fmt.Println("=================================================")
 
 	// ***************************************
