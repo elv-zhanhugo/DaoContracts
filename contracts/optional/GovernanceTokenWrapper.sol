@@ -36,4 +36,16 @@ contract MyToken is ERC20, ERC20Permit, ERC20Votes, ERC20Wrapper {
     {
         super._burn(account, amount);
     }
+
+    function decimals()
+        public view virtual
+        override(ERC20, ERC20Wrapper)
+        returns (uint8)
+    {
+        try IERC20Metadata(address(underlying)).decimals() returns (uint8 value) {
+            return value;
+        } catch {
+            return super.decimals();
+        }
+    }
 }
