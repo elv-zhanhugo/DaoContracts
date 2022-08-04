@@ -357,11 +357,8 @@ func main() {
 	}
 	fmt.Println("Proposal can be executed at", eta, time.Unix(eta.Int64(), 0))
 	fmt.Println("Waiting...")
-	for {
-		if time.Now().Unix() > time.Unix(eta.Int64(), 0).Unix() {
-			break
-		}
-	}
+	time.Sleep(time.Duration(minDelay) * time.Second)
+
 	fmt.Println("Finished queue!")
 	fmt.Println("=================================================")
 
