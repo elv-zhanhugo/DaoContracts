@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+import "../@openzeppelin/contracts/access/Ownable.sol";
+import "../@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
 contract GovernanceToken is Ownable, ERC20Votes {
    // ERC20 tokens have 18 decimals

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/governance/TimelockController.sol";
+import "../../@openzeppelin/contracts/governance/TimelockController.sol";
 
 contract GovernanceTimeLock is TimelockController {
     // minDelay is how long you have to wait before executing

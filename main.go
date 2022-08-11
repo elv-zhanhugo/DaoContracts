@@ -95,7 +95,8 @@ func main() {
 	godotenv.Load()
 
 	// client, err := ethclient.Dial("http://localhost:8545")
-	client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
+	// client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
+	client, err := ethclient.Dial("https://host-76-74-28-234.contentfabric.io/eth/")
 	// client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
 	if err != nil {
 		log.Fatal(err)
@@ -109,7 +110,8 @@ func main() {
 	}
 
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
+	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955210))
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
 	if err != nil {
 		log.Fatal(err)
