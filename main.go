@@ -107,25 +107,25 @@ func createDeploymentsJSON(fileName string, contractABI string) {
 func main() {
 	godotenv.Load()
 
-	// client, err := ethclient.Dial("http://localhost:8545")
+	client, err := ethclient.Dial("http://localhost:8545")
 	// client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
 	// client, err := ethclient.Dial("https://host-76-74-28-234.contentfabric.io/eth/")
-	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
+	// client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
+	privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
 	// privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
-	privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
+	// privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955210))
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
+	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -408,6 +408,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Box is storing: ", retrievedValue)
+	fmt.Println("=================================================")
 
 	// ***************************************
 	// Create/Modify deployments files
@@ -460,4 +461,7 @@ func main() {
 
 	mapDataString, _ := json.Marshal(mapData)
 	os.WriteFile("deployments/map.json", mapDataString, os.ModePerm)
+
+	fmt.Println("Contract addresses and abi are now stored in the deployments directory")
+	fmt.Println("=================================================")
 }
