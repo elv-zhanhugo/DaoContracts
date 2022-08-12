@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
+	"os"
 	"time"
 
 	"github.com/elv-zhanhugo/DaoTest/build/box"
@@ -91,28 +93,39 @@ func MoveBlocks(blocks int, client *ethclient.Client, privateKey *ecdsa.PrivateK
 	}
 }
 
+func createDeploymentsJSON(fileName string, contractABI string) {
+	filePath := fileName + ".json"
+	contractFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
+	if err != nil {
+		log.Fatal(err)
+	}
+	contractFile.Close()
+	contracrABIString, _ := json.Marshal(map[string]interface{}{"abi": contractABI})
+	os.WriteFile(filePath, contracrABIString, os.ModePerm)
+}
+
 func main() {
 	godotenv.Load()
 
 	// client, err := ethclient.Dial("http://localhost:8545")
 	// client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
-	client, err := ethclient.Dial("https://host-76-74-28-234.contentfabric.io/eth/")
-	// client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
+	// client, err := ethclient.Dial("https://host-76-74-28-234.contentfabric.io/eth/")
+	client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
-	privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
-	// privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
+	// privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
+	privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
 	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955210))
-	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
+	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955210))
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -395,4 +408,56 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Box is storing: ", retrievedValue)
+
+	// ***************************************
+	// Create/Modify deployments files
+	// ***************************************
+	networkIdBigInt, err := client.NetworkID(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = os.MkdirAll("deployments/"+networkIdBigInt.String(), 0700)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create contractAddr.json files in the networkId's directory
+	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+boxAddr.String(), box.BoxMetaData.ABI)
+	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+governorAddr.String(), governor_contract.GovernorContractMetaData.ABI)
+	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+govTimelockAddr.String(), governance_timelock.GovernanceTimelockMetaData.ABI)
+	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+govTknAddr.String(), governance_token.GovernanceTokenMetaData.ABI)
+
+	// Create map.json if it doesn't exist, and add deployment information
+	mapFile, err := os.OpenFile("deployments/map.json", os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mapFile.Close()
+
+	mapBytes, _ := os.ReadFile("deployments/map.json")
+	var mapData map[int]map[string][]string
+	err = json.Unmarshal(mapBytes, &mapData)
+
+	if mapData == nil {
+		mapData = map[int]map[string][]string{}
+	}
+
+	networkId := int(networkIdBigInt.Int64())
+	if mapData[networkId] == nil {
+		mapData[networkId] = map[string][]string{
+			"Box":                {},
+			"GovernanceTimeLock": {},
+			"GovernanceToken":    {},
+			"GovernorContract":   {},
+		}
+	}
+
+	mapData[networkId]["Box"] = append(mapData[networkId]["Box"], boxAddr.String())
+	mapData[networkId]["GovernanceTimeLock"] = append(mapData[networkId]["GovernanceTimeLock"], govTimelockAddr.String())
+	mapData[networkId]["GovernanceToken"] = append(mapData[networkId]["GovernanceToken"], govTknAddr.String())
+	mapData[networkId]["GovernorContract"] = append(mapData[networkId]["GovernorContract"], governorAddr.String())
+
+	mapDataString, _ := json.Marshal(mapData)
+	os.WriteFile("deployments/map.json", mapDataString, os.ModePerm)
 }
