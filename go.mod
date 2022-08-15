@@ -1,4 +1,4 @@
-module github.com/elv-zhanhugo/DaoTest
+module github.com/elv-zhanhugo/DaoContracts
 
 go 1.17
 

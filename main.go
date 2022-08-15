@@ -10,10 +10,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/elv-zhanhugo/DaoTest/build/box"
-	"github.com/elv-zhanhugo/DaoTest/build/governance_standard/governance_timelock"
-	"github.com/elv-zhanhugo/DaoTest/build/governance_standard/governor_contract"
-	"github.com/elv-zhanhugo/DaoTest/build/governance_token"
+	"github.com/elv-zhanhugo/DaoContracts/build/box"
+	"github.com/elv-zhanhugo/DaoContracts/build/dex"
+	"github.com/elv-zhanhugo/DaoContracts/build/governance_timelock"
+	"github.com/elv-zhanhugo/DaoContracts/build/governance_token"
+	"github.com/elv-zhanhugo/DaoContracts/build/governor_contract"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -104,31 +105,60 @@ func createDeploymentsJSON(fileName string, contractABI string) {
 	os.WriteFile(filePath, contracrABIString, os.ModePerm)
 }
 
+func selectNetwork(network string) (*ethclient.Client, *ecdsa.PrivateKey, *bind.TransactOpts) {
+	var url string
+	var privateKeyString string
+	var networkId *big.Int
+
+	switch network {
+	case "local":
+		url = "http://localhost:8545"
+		privateKeyString = "b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b"
+		networkId = big.NewInt(955101)
+	case "demo":
+		url = "https://host-76-74-28-234.contentfabric.io/eth/"
+		privateKeyString = "76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06"
+		networkId = big.NewInt(955210)
+	case "tv4":
+		url = "https://host-468.contentfabric.io/eth"
+		privateKeyString = "76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06"
+		networkId = big.NewInt(955205)
+
+	case "rinkeby":
+		url = "https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID")
+		privateKeyString = os.Getenv("PRIVATE_KEY")
+		networkId = big.NewInt(4)
+	default:
+		log.Fatal("invalid network")
+	}
+
+	client, err := ethclient.Dial(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyString)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, networkId)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return client, privateKey, auth
+}
+
 func main() {
 	godotenv.Load()
 
-	client, err := ethclient.Dial("http://localhost:8545")
-	// client, err := ethclient.Dial("https://host-468.contentfabric.io/eth")
-	// client, err := ethclient.Dial("https://host-76-74-28-234.contentfabric.io/eth/")
-	// client, err := ethclient.Dial("https://rinkeby.infura.io/v3/" + os.Getenv("WEB3_INFURA_PROJECT_ID"))
-	if err != nil {
-		log.Fatal(err)
+	if len(os.Args) == 1 {
+		log.Fatal("Please choose a network")
 	}
 
-	privateKey, err := crypto.HexToECDSA("b67bffcebaa19782243b27d8b940ee011cd4e432d40769f788f174fad53f870b")
-	// privateKey, err := crypto.HexToECDSA("76c59369d6c13f7321af8e5725a76d3b772aaf6b3d28eb631f5572daf4e0de06")
-	// privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
-	if err != nil {
-		log.Fatal(err)
-	}
+	client, privateKey, auth := selectNetwork(os.Args[1])
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955101))
-	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955205))
-	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(955210))
-	// auth, err := bind.NewKeyedTransactorWithChainID(privateKey, big.NewInt(4))
-	if err != nil {
-		log.Fatal(err)
-	}
 	auth.GasLimit = uint64(20000000)
 
 	blkNum, err := client.BlockNumber(context.Background())
@@ -170,6 +200,40 @@ func main() {
 	fmt.Println("=================================================")
 
 	// ***************************************
+	// Deploy and configure Dex
+	// ***************************************
+
+	dexAddr, dexTx, dexInst, err := dex.DeployDex(auth, client, govTknAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dexAddr, err = bind.WaitDeployed(context.Background(), client, dexTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Deployed Dex,", "address:", dexAddr.Hex(), "tx hash:", dexTx.Hash().String())
+
+	totalSupply, err := govTknInst.TotalSupply(&bind.CallOpts{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	var quorumPercentage int64 = 4
+	quorumAmount := big.NewInt(0).Add(big.NewInt(0), totalSupply)
+	quorumFraction := big.NewInt(0).Div(big.NewInt(100), big.NewInt(quorumPercentage))
+	quorumAmount.Div(quorumAmount, quorumFraction)
+	dexSupply := big.NewInt(0).Sub(totalSupply, quorumAmount)
+	transferTx, err := govTknInst.Transfer(&bind.TransactOpts{From: auth.From, Signer: auth.Signer}, dexAddr, dexSupply)
+	if err != nil {
+		log.Fatal(err)
+	}
+	transferTxRct, err := bind.WaitMined(context.Background(), client, transferTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Transferred", dexSupply, "of GT to Dex,", "tx hash:", transferTxRct.TxHash.String())
+	fmt.Println("=================================================")
+
+	// ***************************************
 	// Deploy and configure GovernanceTimelock
 	// ***************************************
 
@@ -189,7 +253,6 @@ func main() {
 	// Deploy and configure Governor
 	// ***************************************
 
-	var quorumPercentage int64 = 4
 	var votingPeriod int64 = 5 // blocks
 	var votingDelay int64 = 1  // blocks
 
@@ -274,6 +337,20 @@ func main() {
 	// ***************************************
 	// Propose new store value for box contract
 	// ***************************************
+
+	buyTx, err := dexInst.Buy(&bind.TransactOpts{From: auth.From, Signer: auth.Signer, Value: big.NewInt(1)})
+	if err != nil {
+		log.Fatal(err)
+	}
+	buyTxRct, err := bind.WaitMined(context.Background(), client, buyTx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	votes, err := govTknInst.GetVotes(&bind.CallOpts{}, auth.From)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Bought GT from Dex, now account contains", votes, "GT", "tx hash:", buyTxRct.TxHash.String())
 
 	proposalDescription := "Storing hello world!"
 	newStoreValue := []string{"hello world!"}
@@ -425,6 +502,7 @@ func main() {
 
 	// Create contractAddr.json files in the networkId's directory
 	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+boxAddr.String(), box.BoxMetaData.ABI)
+	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+dexAddr.String(), dex.DexMetaData.ABI)
 	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+governorAddr.String(), governor_contract.GovernorContractMetaData.ABI)
 	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+govTimelockAddr.String(), governance_timelock.GovernanceTimelockMetaData.ABI)
 	createDeploymentsJSON("deployments/"+networkIdBigInt.String()+"/"+govTknAddr.String(), governance_token.GovernanceTokenMetaData.ABI)
@@ -448,6 +526,7 @@ func main() {
 	if mapData[networkId] == nil {
 		mapData[networkId] = map[string][]string{
 			"Box":                {},
+			"Dex":                {},
 			"GovernanceTimeLock": {},
 			"GovernanceToken":    {},
 			"GovernorContract":   {},
@@ -455,6 +534,7 @@ func main() {
 	}
 
 	mapData[networkId]["Box"] = append(mapData[networkId]["Box"], boxAddr.String())
+	mapData[networkId]["Dex"] = append(mapData[networkId]["Dex"], dexAddr.String())
 	mapData[networkId]["GovernanceTimeLock"] = append(mapData[networkId]["GovernanceTimeLock"], govTimelockAddr.String())
 	mapData[networkId]["GovernanceToken"] = append(mapData[networkId]["GovernanceToken"], govTknAddr.String())
 	mapData[networkId]["GovernorContract"] = append(mapData[networkId]["GovernorContract"], governorAddr.String())

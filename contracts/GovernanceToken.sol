@@ -5,7 +5,7 @@ import "../@openzeppelin/contracts/access/Ownable.sol";
 import "../@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
 contract GovernanceToken is Ownable, ERC20Votes {
-   // ERC20 tokens have 18 decimals
+    // ERC20 tokens have 18 decimals
     // number of tokens minted = n * 10^18
     uint256 n = 1000;
 
